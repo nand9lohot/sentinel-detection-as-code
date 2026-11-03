@@ -1,0 +1,84 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "detections/**"
+      - "schemas/**"
+      - "sdac/**"
+      - "pyproject.toml"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      prune:
+        description: Delete repo-managed rules that are no longer in Git
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Never run two deployments at once, and never cancel one partway through.
+concurrency:
+  group: sentinel-deploy
+  cancel-in-progress: false
+
+env:
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  SENTINEL_RESOURCE_GROUP: ${{ vars.SENTINEL_RESOURCE_GROUP }}
+  SENTINEL_WORKSPACE: ${{ vars.SENTINEL_WORKSPACE }}
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  # Read-only identity. The result appears in the run summary for the deployment approver.
+  plan:
+    needs: ci
+    if: vars.SENTINEL_WORKSPACE != ''
+    runs-on: ubuntu-latest
+    environment: sentinel-read
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - uses: azure/login@053f7285eb20bf5469ef084617b0b24d3cec53fc # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - run: sdac plan
+
+  deploy:
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: sentinel-production # Add required reviewers here to get an approval gate.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - uses: azure/login@053f7285eb20bf5469ef084617b0b24d3cec53fc # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy rules
+        env:
+          PRUNE: ${{ inputs.prune }}
+        run: |
+          if [ "$PRUNE" = "true" ]; then
+            sdac deploy --prune
+          else
+            sdac deploy
+          fi
