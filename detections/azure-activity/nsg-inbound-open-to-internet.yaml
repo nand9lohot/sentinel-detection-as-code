@@ -1,0 +1,63 @@
+id: b5d7e9a3-2c41-4f86-8e0d-9a3c6f1b7e52
+name: NSG rule allows inbound traffic from the internet
+description: |
+  Identifies a network security group rule written to allow inbound traffic from any source.
+  This covers changes to individual rules, not rules embedded in a whole-NSG update. Check the
+  exposed port and confirm the change was approved.
+severity: High
+requiredDataConnectors:
+  - connectorId: AzureActivity
+    dataTypes:
+      - AzureActivity
+queryFrequency: 1h
+queryPeriod: 1h
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - DefenseEvasion
+relevantTechniques:
+  - T1562.007
+query: |
+  let lookback = 1h;
+  let openSources = dynamic(["*", "0.0.0.0/0", "::/0", "Internet", "Any"]);
+  AzureActivity
+  | where TimeGenerated > ago(lookback)
+  | where OperationNameValue =~ "Microsoft.Network/networkSecurityGroups/securityRules/write"
+  // The request body is logged on the Start event, before the operation result is known.
+  | where ActivityStatusValue in~ ("Start", "Started")
+  | extend Rule = parse_json(tostring(Properties_d.requestbody)).properties
+  | extend Access = tostring(Rule.access), Direction = tostring(Rule.direction)
+  | extend SourcePrefix = tostring(Rule.sourceAddressPrefix), SourcePrefixes = tostring(Rule.sourceAddressPrefixes)
+  | extend DestinationPort = coalesce(tostring(Rule.destinationPortRange), tostring(Rule.destinationPortRanges))
+  | where Access =~ "Allow" and Direction =~ "Inbound"
+  | where SourcePrefix in~ (openSources)
+      or SourcePrefixes contains @"""*"""
+      or SourcePrefixes contains "0.0.0.0/0"
+      or SourcePrefixes contains "::/0"
+      or SourcePrefixes contains "Internet"
+  | extend AccountName = tostring(split(Caller, "@")[0]), AccountUPNSuffix = tostring(split(Caller, "@")[1])
+  | project TimeGenerated, Caller, AccountName, AccountUPNSuffix, CallerIpAddress, SourcePrefix, SourcePrefixes, DestinationPort, AzureResourceId = _ResourceId
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: Name
+        columnName: AccountName
+      - identifier: UPNSuffix
+        columnName: AccountUPNSuffix
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: CallerIpAddress
+  - entityType: AzureResource
+    fieldMappings:
+      - identifier: ResourceId
+        columnName: AzureResourceId
+customDetails:
+  DestinationPort: DestinationPort
+  SourcePrefix: SourcePrefix
+eventGroupingSettings:
+  aggregationKind: AlertPerResult
+alertDetailsOverride:
+  alertDisplayNameFormat: "NSG opened to the internet on port {{DestinationPort}} by {{Caller}}"
+version: 1.0.0
+kind: Scheduled

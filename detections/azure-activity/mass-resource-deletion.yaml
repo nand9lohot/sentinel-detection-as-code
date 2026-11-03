@@ -1,0 +1,61 @@
+id: 8c2e6a14-5d3b-47f9-a0e1-6b9d4c7f1a23
+name: Mass Azure resource deletion by one caller
+description: |
+  Identifies one caller successfully deleting 10 or more distinct Azure resources within an
+  hour. Confirm this was planned decommissioning. If it was not, contain the caller and start
+  recovery.
+severity: High
+requiredDataConnectors:
+  - connectorId: AzureActivity
+    dataTypes:
+      - AzureActivity
+queryFrequency: 1h
+queryPeriod: 1h
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - Impact
+relevantTechniques:
+  - T1485
+query: |
+  let lookback = 1h;
+  let minDeletedResources = 10;
+  // Azure prunes old deployment history automatically, so these deletes are routine.
+  let ignoredOperations = dynamic(["Microsoft.Resources/deployments/delete"]);
+  AzureActivity
+  | where TimeGenerated > ago(lookback)
+  | where OperationNameValue endswith "/delete"
+  | where OperationNameValue !in~ (ignoredOperations)
+  | where ActivityStatusValue in~ ("Success", "Succeeded")
+  | where isnotempty(Caller) and isnotempty(_ResourceId)
+  | summarize
+      TimeGenerated = max(TimeGenerated),
+      StartTime = min(TimeGenerated),
+      DeletedResources = dcount(tolower(_ResourceId)),
+      ResourceSample = make_set(_ResourceId, 20),
+      CallerIpAddress = take_any(CallerIpAddress),
+      SubscriptionId = take_any(SubscriptionId)
+      by Caller
+  | where DeletedResources >= minDeletedResources
+  | extend AccountName = tostring(split(Caller, "@")[0]), AccountUPNSuffix = tostring(split(Caller, "@")[1])
+  | project TimeGenerated, StartTime, Caller, AccountName, AccountUPNSuffix, CallerIpAddress, DeletedResources, ResourceSample, SubscriptionId
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: Name
+        columnName: AccountName
+      - identifier: UPNSuffix
+        columnName: AccountUPNSuffix
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: CallerIpAddress
+customDetails:
+  DeletedResources: DeletedResources
+  ResourceSample: ResourceSample
+eventGroupingSettings:
+  aggregationKind: AlertPerResult
+alertDetailsOverride:
+  alertDisplayNameFormat: "{{Caller}} deleted {{DeletedResources}} Azure resources"
+version: 1.0.0
+kind: Scheduled

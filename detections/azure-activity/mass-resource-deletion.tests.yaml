@@ -1,0 +1,72 @@
+cases:
+  - name: Twelve distinct deletions by one caller fire
+    expect: fire
+    expect_rows: 1
+    expect_first_row:
+      Caller: mallory@contoso.com
+      DeletedResources: 12
+    tables:
+      AzureActivity:
+        - repeat: 12
+          minutes_ago: 10
+          OperationNameValue: Microsoft.Compute/virtualMachines/delete
+          ActivityStatusValue: Success
+          Caller: mallory@contoso.com
+          CallerIpAddress: 203.0.113.10
+          _ResourceId: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/prod/providers/Microsoft.Compute/virtualMachines/vm{i}
+  - name: Nine deletions stay below the threshold
+    expect: silent
+    tables:
+      AzureActivity:
+        - repeat: 9
+          minutes_ago: 10
+          OperationNameValue: Microsoft.Compute/virtualMachines/delete
+          ActivityStatusValue: Success
+          Caller: admin@contoso.com
+          _ResourceId: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/dev/providers/Microsoft.Compute/virtualMachines/vm{i}
+  - name: Repeated events for one resource count once
+    expect: silent
+    tables:
+      AzureActivity:
+        - repeat: 12
+          minutes_ago: 10
+          OperationNameValue: Microsoft.Compute/virtualMachines/delete
+          ActivityStatusValue: Success
+          Caller: admin@contoso.com
+          _ResourceId: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/dev/providers/Microsoft.Compute/virtualMachines/vm1
+  - name: Failed deletions stay silent
+    expect: silent
+    tables:
+      AzureActivity:
+        - repeat: 12
+          minutes_ago: 10
+          OperationNameValue: Microsoft.Compute/virtualMachines/delete
+          ActivityStatusValue: Failure
+          Caller: admin@contoso.com
+          _ResourceId: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/dev/providers/Microsoft.Compute/virtualMachines/vm{i}
+  - name: Deployment history cleanup stays silent
+    expect: silent
+    tables:
+      AzureActivity:
+        - repeat: 12
+          minutes_ago: 10
+          OperationNameValue: MICROSOFT.RESOURCES/DEPLOYMENTS/DELETE
+          ActivityStatusValue: Success
+          Caller: admin@contoso.com
+          _ResourceId: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/dev/providers/Microsoft.Resources/deployments/d{i}
+  - name: Deletions by different callers are not combined
+    expect: silent
+    tables:
+      AzureActivity:
+        - repeat: 6
+          minutes_ago: 10
+          OperationNameValue: Microsoft.Compute/virtualMachines/delete
+          ActivityStatusValue: Success
+          Caller: alice@contoso.com
+          _ResourceId: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/a/providers/Microsoft.Compute/virtualMachines/vm{i}
+        - repeat: 6
+          minutes_ago: 10
+          OperationNameValue: Microsoft.Compute/virtualMachines/delete
+          ActivityStatusValue: Success
+          Caller: bob@contoso.com
+          _ResourceId: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/b/providers/Microsoft.Compute/virtualMachines/vm{i}

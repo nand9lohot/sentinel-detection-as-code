@@ -1,0 +1,61 @@
+cases:
+  - name: Owner assignment fires and extracts the role and principal
+    expect: fire
+    expect_rows: 1
+    expect_first_row:
+      RoleName: Owner
+      PrincipalId: 11111111-2222-3333-4444-555555555555
+      AccountName: mallory
+      AccountUPNSuffix: contoso.com
+    tables:
+      AzureActivity:
+        - minutes_ago: 5
+          OperationNameValue: MICROSOFT.AUTHORIZATION/ROLEASSIGNMENTS/WRITE
+          ActivityStatusValue: Start
+          Caller: mallory@contoso.com
+          CallerIpAddress: 203.0.113.10
+          _ResourceId: /subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleAssignments/a1
+          Properties_d:
+            requestbody: '{"Properties":{"PrincipalId":"11111111-2222-3333-4444-555555555555","PrincipalType":"User","RoleDefinitionId":"/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635"}}'
+  - name: Lowercase request body keys are also matched
+    expect: fire
+    expect_first_row:
+      RoleName: User Access Administrator
+    tables:
+      AzureActivity:
+        - minutes_ago: 5
+          OperationNameValue: Microsoft.Authorization/roleAssignments/write
+          ActivityStatusValue: Started
+          Caller: mallory@contoso.com
+          Properties_d:
+            requestbody: '{"properties":{"principalId":"11111111-2222-3333-4444-555555555555","roleDefinitionId":"/providers/Microsoft.Authorization/roleDefinitions/18D7D88D-D35E-4FB5-A5C3-7773C20A72D9"}}'
+  - name: Low-privilege Reader assignment stays silent
+    expect: silent
+    tables:
+      AzureActivity:
+        - minutes_ago: 5
+          OperationNameValue: Microsoft.Authorization/roleAssignments/write
+          ActivityStatusValue: Start
+          Caller: admin@contoso.com
+          Properties_d:
+            requestbody: '{"Properties":{"RoleDefinitionId":"/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7"}}'
+  - name: The Success event for the same operation is not counted twice
+    expect: silent
+    tables:
+      AzureActivity:
+        - minutes_ago: 5
+          OperationNameValue: Microsoft.Authorization/roleAssignments/write
+          ActivityStatusValue: Success
+          Caller: admin@contoso.com
+          Properties_d:
+            requestbody: '{"Properties":{"RoleDefinitionId":"/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635"}}'
+  - name: Events outside the lookback window stay silent
+    expect: silent
+    tables:
+      AzureActivity:
+        - minutes_ago: 120
+          OperationNameValue: Microsoft.Authorization/roleAssignments/write
+          ActivityStatusValue: Start
+          Caller: admin@contoso.com
+          Properties_d:
+            requestbody: '{"Properties":{"RoleDefinitionId":"/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635"}}'

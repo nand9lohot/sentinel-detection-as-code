@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sdac"
+version = "0.1.0"
+description = "Lightweight detection-as-code tooling for Microsoft Sentinel"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6,<7", "jsonschema>=4,<5", "requests>=2.31,<3"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+sdac = "sdac.cli:main"
+
+[tool.setuptools]
+packages = ["sdac"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

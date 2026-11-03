@@ -1,0 +1,58 @@
+cases:
+  - name: SSH opened from any source fires and extracts the port
+    expect: fire
+    expect_rows: 1
+    expect_first_row:
+      DestinationPort: "22"
+      SourcePrefix: "*"
+      AccountName: mallory
+    tables:
+      AzureActivity:
+        - minutes_ago: 5
+          OperationNameValue: Microsoft.Network/networkSecurityGroups/securityRules/write
+          ActivityStatusValue: Start
+          Caller: mallory@contoso.com
+          CallerIpAddress: 203.0.113.10
+          _ResourceId: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/prod/providers/Microsoft.Network/networkSecurityGroups/web/securityRules/ssh
+          Properties_d:
+            requestbody: '{"properties":{"access":"Allow","direction":"Inbound","sourceAddressPrefix":"*","destinationPortRange":"22"}}'
+  - name: An open source inside a prefix list fires
+    expect: fire
+    tables:
+      AzureActivity:
+        - minutes_ago: 5
+          OperationNameValue: Microsoft.Network/networkSecurityGroups/securityRules/write
+          ActivityStatusValue: Start
+          Caller: mallory@contoso.com
+          Properties_d:
+            requestbody: '{"properties":{"access":"Allow","direction":"Inbound","sourceAddressPrefixes":["10.0.0.0/8","0.0.0.0/0"],"destinationPortRanges":["3389","445"]}}'
+  - name: A private source range stays silent
+    expect: silent
+    tables:
+      AzureActivity:
+        - minutes_ago: 5
+          OperationNameValue: Microsoft.Network/networkSecurityGroups/securityRules/write
+          ActivityStatusValue: Start
+          Caller: admin@contoso.com
+          Properties_d:
+            requestbody: '{"properties":{"access":"Allow","direction":"Inbound","sourceAddressPrefix":"10.0.0.0/8","destinationPortRange":"22"}}'
+  - name: A deny rule stays silent
+    expect: silent
+    tables:
+      AzureActivity:
+        - minutes_ago: 5
+          OperationNameValue: Microsoft.Network/networkSecurityGroups/securityRules/write
+          ActivityStatusValue: Start
+          Caller: admin@contoso.com
+          Properties_d:
+            requestbody: '{"properties":{"access":"Deny","direction":"Inbound","sourceAddressPrefix":"*","destinationPortRange":"22"}}'
+  - name: An outbound rule stays silent
+    expect: silent
+    tables:
+      AzureActivity:
+        - minutes_ago: 5
+          OperationNameValue: Microsoft.Network/networkSecurityGroups/securityRules/write
+          ActivityStatusValue: Start
+          Caller: admin@contoso.com
+          Properties_d:
+            requestbody: '{"properties":{"access":"Allow","direction":"Outbound","sourceAddressPrefix":"*","destinationPortRange":"443"}}'

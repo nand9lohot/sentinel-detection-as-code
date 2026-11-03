@@ -1,0 +1,10 @@
+{
+  "name": "sdac-kql-check",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Offline KQL syntax and schema checks using Microsoft's Kusto language library",
+  "main": "check.js",
+  "dependencies": {
+    "@kusto/language-service-next": "12.4.1"
+  }
+}

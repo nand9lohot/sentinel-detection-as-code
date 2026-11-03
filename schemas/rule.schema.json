@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sentinel scheduled analytics rule",
+  "description": "Follows Microsoft's analytics rule YAML format, plus an optional enabled flag.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "description", "severity", "requiredDataConnectors", "queryFrequency", "queryPeriod", "triggerOperator", "triggerThreshold", "tactics", "relevantTechniques", "query", "entityMappings", "version", "kind"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+    "name": {"type": "string", "minLength": 1, "maxLength": 100},
+    "description": {"type": "string", "minLength": 1},
+    "severity": {"enum": ["Informational", "Low", "Medium", "High"]},
+    "enabled": {"type": "boolean"},
+    "status": {"enum": ["Available", "InPreview", "Deprecated"]},
+    "requiredDataConnectors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["connectorId", "dataTypes"],
+        "properties": {
+          "connectorId": {"type": "string"},
+          "dataTypes": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+        }
+      }
+    },
+    "queryFrequency": {"$ref": "#/$defs/duration"},
+    "queryPeriod": {"$ref": "#/$defs/duration"},
+    "suppressionDuration": {"$ref": "#/$defs/duration"},
+    "suppressionEnabled": {"type": "boolean"},
+    "triggerOperator": {"enum": ["gt", "lt", "eq", "ne"]},
+    "triggerThreshold": {"type": "integer", "minimum": 0, "maximum": 10000},
+    "tactics": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["Reconnaissance", "ResourceDevelopment", "InitialAccess", "Execution", "Persistence", "PrivilegeEscalation", "DefenseEvasion", "CredentialAccess", "Discovery", "LateralMovement", "Collection", "Exfiltration", "CommandAndControl", "Impact", "PreAttack", "ImpairProcessControl", "InhibitResponseFunction"]}
+    },
+    "relevantTechniques": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"}
+    },
+    "query": {"type": "string", "minLength": 1, "maxLength": 10000},
+    "entityMappings": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entityType", "fieldMappings"],
+        "properties": {
+          "entityType": {"enum": ["Account", "Host", "IP", "Malware", "File", "Process", "CloudApplication", "DNS", "AzureResource", "FileHash", "RegistryKey", "RegistryValue", "SecurityGroup", "URL", "Mailbox", "MailCluster", "MailMessage", "SubmissionMail"]},
+          "fieldMappings": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["identifier", "columnName"],
+              "properties": {"identifier": {"type": "string"}, "columnName": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "customDetails": {
+      "type": "object",
+      "maxProperties": 20,
+      "propertyNames": {"maxLength": 20},
+      "additionalProperties": {"type": "string"}
+    },
+    "eventGroupingSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aggregationKind"],
+      "properties": {"aggregationKind": {"enum": ["SingleAlert", "AlertPerResult"]}}
+    },
+    "alertDetailsOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "alertDisplayNameFormat": {"type": "string"},
+        "alertDescriptionFormat": {"type": "string"},
+        "alertTacticsColumnName": {"type": "string"},
+        "alertSeverityColumnName": {"type": "string"},
+        "alertDynamicProperties": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["alertProperty", "value"],
+            "properties": {
+              "alertProperty": {"enum": ["AlertLink", "ConfidenceLevel", "ConfidenceScore", "ExtendedLinks", "ProductName", "ProviderName", "ProductComponentName", "RemediationSteps", "Techniques"]},
+              "value": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "incidentConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["createIncident"],
+      "properties": {
+        "createIncident": {"type": "boolean"},
+        "groupingConfiguration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "reopenClosedIncident", "lookbackDuration", "matchingMethod"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "reopenClosedIncident": {"type": "boolean"},
+            "lookbackDuration": {"$ref": "#/$defs/duration"},
+            "matchingMethod": {"enum": ["AllEntities", "AnyAlert", "Selected"]},
+            "groupByEntities": {"type": "array", "items": {"type": "string"}},
+            "groupByAlertDetails": {"type": "array", "items": {"enum": ["DisplayName", "Severity"]}},
+            "groupByCustomDetails": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "kind": {"const": "Scheduled"}
+  },
+  "$defs": {
+    "duration": {"type": "string", "pattern": "^[1-9][0-9]*[mhd]$"}
+  }
+}

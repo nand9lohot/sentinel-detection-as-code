@@ -1,0 +1,69 @@
+id: 3f9b1c52-7a4e-4d18-9c63-1e8a5b7d2f40
+name: Privileged Azure role assigned
+description: |
+  Identifies an assignment of the Owner, Contributor, User Access Administrator or Role Based
+  Access Control Administrator role. Confirm the change has an approved ticket and that the
+  caller normally manages access.
+severity: Medium
+requiredDataConnectors:
+  - connectorId: AzureActivity
+    dataTypes:
+      - AzureActivity
+queryFrequency: 1h
+queryPeriod: 1h
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - Persistence
+  - PrivilegeEscalation
+relevantTechniques:
+  - T1098.003
+query: |
+  let lookback = 1h;
+  let owner = "8e3af657-a8ff-443c-a75c-2fe8c4bcb635";
+  let contributor = "b24988ac-6180-42a0-ab88-20f7382dd24c";
+  let userAccessAdmin = "18d7d88d-d35e-4fb5-a5c3-7773c20a72d9";
+  let rbacAdmin = "f58310d9-a9f6-439a-9e8d-f62e7b41a168";
+  AzureActivity
+  | where TimeGenerated > ago(lookback)
+  | where OperationNameValue =~ "Microsoft.Authorization/roleAssignments/write"
+  // The request body is logged on the Start event, before the operation result is known.
+  | where ActivityStatusValue in~ ("Start", "Started")
+  | extend Body = parse_json(tostring(Properties_d.requestbody))
+  | extend RoleDefinitionId = coalesce(tostring(Body.Properties.RoleDefinitionId), tostring(Body.properties.roleDefinitionId))
+  | extend PrincipalId = coalesce(tostring(Body.Properties.PrincipalId), tostring(Body.properties.principalId))
+  | extend PrincipalType = coalesce(tostring(Body.Properties.PrincipalType), tostring(Body.properties.principalType))
+  | extend RoleId = tolower(extract(@"([0-9a-fA-F-]{36})$", 1, RoleDefinitionId))
+  | where RoleId in (owner, contributor, userAccessAdmin, rbacAdmin)
+  | extend RoleName = case(
+      RoleId == owner, "Owner",
+      RoleId == contributor, "Contributor",
+      RoleId == userAccessAdmin, "User Access Administrator",
+      "Role Based Access Control Administrator")
+  | extend AccountName = tostring(split(Caller, "@")[0]), AccountUPNSuffix = tostring(split(Caller, "@")[1])
+  | project TimeGenerated, Caller, AccountName, AccountUPNSuffix, CallerIpAddress, RoleName, PrincipalId, PrincipalType, SubscriptionId, AzureResourceId = _ResourceId
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: Name
+        columnName: AccountName
+      - identifier: UPNSuffix
+        columnName: AccountUPNSuffix
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: CallerIpAddress
+  - entityType: AzureResource
+    fieldMappings:
+      - identifier: ResourceId
+        columnName: AzureResourceId
+customDetails:
+  RoleName: RoleName
+  PrincipalId: PrincipalId
+  PrincipalType: PrincipalType
+eventGroupingSettings:
+  aggregationKind: AlertPerResult
+alertDetailsOverride:
+  alertDisplayNameFormat: "{{RoleName}} role assigned by {{Caller}}"
+version: 1.0.0
+kind: Scheduled
